@@ -18,7 +18,7 @@ def get_wl_color(wl):
     elif 620 <= wl <= 750: return 'red'
     return 'red'
 
-@st.cache_data # Streamlit 加速神器，避免重複計算相同的數值
+@st.cache_data # 快取加速：相同的參數不需要重新算數學
 def calculate_intensity(wl, d_mm, D_m, mode, screen_size, resolution=400):
     if mode == 'Visible Light':
         wavelength = wl * 1e-9  
@@ -48,7 +48,9 @@ def draw_layout(wl, d, D, mode):
     ax.set_xlim(0, 10)
     ax.set_ylim(0, 10)
     
+    # --- 整合 L1 與 L2 的標示邏輯 ---
     if mode == 'Visible Light':
+        L1 = 50.0  # 虛擬固定距離
         beam_color = get_wl_color(wl)
         tx_name = "Laser"
         m2_max_d = 2.0  
@@ -56,7 +58,9 @@ def draw_layout(wl, d, D, mode):
         m2_name = "M2 (Movable Mirror)"
         screen_name = "Screen"
         wl_unit = "nm"
+        dist_unit = "mm"
     else:
+        L1 = 200.0 # 微波模式儀器較大
         beam_color = 'orange'
         tx_name = "Microwave Tx"
         m2_max_d = 150.0 
@@ -64,20 +68,30 @@ def draw_layout(wl, d, D, mode):
         m2_name = "M2 (Movable Plate)"
         screen_name = "Detector Plane"
         wl_unit = "mm"
+        dist_unit = "mm"
+        
+    L2 = L1 + d  # 計算 M2 的絕對距離
         
     ax.add_patch(plt.Rectangle((0.2, 4.5), 1.8, 1.0, facecolor='gray', edgecolor='black', zorder=3))
     ax.text(1.1, 5.0, tx_name, ha='center', va='center', color='white', fontweight='bold', fontsize=9)
     ax.plot([2.0, 4.5], [5.0, 5.0], color=beam_color, lw=3, zorder=1)
+    
     ax.plot([4.1, 4.9], [4.6, 5.4], color='cyan', lw=5, alpha=0.7, zorder=3)
     ax.text(3.7, 5.4, "BS", fontweight='bold', color='darkcyan')
+    
+    # M1 光路與 L1 標示
     ax.plot([4.0, 5.0], [8.0, 8.0], color='black', lw=4, zorder=3)
     ax.text(4.5, 8.3, m1_name, ha='center', fontweight='bold', fontsize=9)
     ax.plot([4.5, 4.5], [5.0, 8.0], color=beam_color, lw=3, zorder=1)
+    ax.text(4.2, 6.5, f"L1 = {L1} {dist_unit}", rotation=90, va='center', color='gray', fontsize=9)
     
+    # M2 光路與 L2 標示
     m2_x = 6.2 + (d / m2_max_d) * 1.6
     ax.plot([m2_x, m2_x], [4.5, 5.5], color='black', lw=4, zorder=3)
     ax.text(m2_x, 5.8, m2_name, ha='center', fontweight='bold', fontsize=9)
     ax.plot([4.5, m2_x], [5.0, 5.0], color=beam_color, lw=3, zorder=1)
+    ax.text(5.5, 4.7, f"L2 = {L2:.2f} {dist_unit}", ha='center', color='gray', fontsize=9)
+    
     ax.annotate('', xy=(8.2, 4.0), xytext=(6.0, 4.0), arrowprops=dict(arrowstyle='<->', color='orange', lw=1.5))
     ax.text(7.1, 3.5, "Path Diff $d$", ha='center', color='orange', fontsize=9)
     
@@ -86,12 +100,17 @@ def draw_layout(wl, d, D, mode):
     ax.plot([3.5, 5.5], [screen_y, screen_y], color='darkred', lw=4, zorder=3)
     ax.text(5.8, screen_y, screen_name, va='center', fontweight='bold', color='darkred', fontsize=9)
     ax.plot([4.5, 4.5], [5.0, screen_y], color=beam_color, lw=3, linestyle='--', zorder=1)
+    
     ax.annotate('', xy=(3.0, 5.0), xytext=(3.0, screen_y), arrowprops=dict(arrowstyle='<->', color='green', lw=1.5))
     ax.text(2.2, (5.0 + screen_y)/2, "Dist $D$", va='center', color='green', fontsize=9)
     
-    ax.text(0.5, 2.2, f"λ = {wl:.1f} {wl_unit}", fontsize=11, color='blue', fontweight='bold')
-    ax.text(0.5, 1.5, f"d = {d:.3f} mm", fontsize=11, color='orange', fontweight='bold')
-    ax.text(0.5, 0.8, f"D = {D:.2f} m", fontsize=11, color='green', fontweight='bold')
+    # 左下角升級版 HUD 儀表板
+    ax.text(0.5, 2.5, f"λ = {wl:.1f} {wl_unit}", fontsize=11, color='blue', fontweight='bold')
+    ax.text(0.5, 2.0, f"L1 = {L1:.1f} {dist_unit}", fontsize=11, color='gray')
+    ax.text(0.5, 1.5, f"L2 = {L2:.2f} {dist_unit}", fontsize=11, color='gray')
+    ax.text(0.5, 1.0, f"ΔL(2d) = {(2*d):.3f} {dist_unit}", fontsize=11, color='orange', fontweight='bold')
+    ax.text(0.5, 0.5, f"Screen D = {D:.2f} m", fontsize=11, color='green', fontweight='bold')
+    
     return fig
 
 # ================= 3. Streamlit 側邊欄 UI =================
@@ -125,6 +144,7 @@ with col2:
     intensity = calculate_intensity(wl, d, D, mode, screen_size)
     ext = [-screen_size/2*100, screen_size/2*100, -screen_size/2*100, screen_size/2*100]
     
+    # --- 整合動態色彩漸層 ---
     if mode == 'Visible Light':
         current_color = get_wl_color(wl)
         custom_cmap = LinearSegmentedColormap.from_list('dynamic_laser', ['black', current_color])
